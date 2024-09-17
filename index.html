@@ -9,22 +9,30 @@
             height: 400px;
             width: 100%;
         }
+        #results {
+            margin-top: 20px;
+        }
     </style>
 </head>
 <body>
     <h1>Select Coordinates for DunkinScout</h1>
     <div id="map"></div>
     <p>Coordinates: <span id="coordinates"></span></p>
+    
+    <label for="product">Enter product:</label>
+    <input type="text" id="product" placeholder="Product name">
+    <button id="search">Search Prices</button>
+
+    <div id="results"></div>
 
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <script>
         var map = L.map('map').setView([42.3601, -71.0589], 13); // Default to Boston
+        var marker;
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }).addTo(map);
-
-        var marker;
 
         map.on('click', function(e) {
             var latlng = e.latlng;
@@ -34,6 +42,38 @@
                 marker = L.marker(latlng).addTo(map);
             }
             document.getElementById('coordinates').textContent = `Lat: ${latlng.lat}, Lng: ${latlng.lng}`;
+        });
+
+        document.getElementById('search').addEventListener('click', function() {
+            var coordinates = document.getElementById('coordinates').textContent;
+            var product = document.getElementById('product').value;
+            
+            if (coordinates && product) {
+                var [lat, lng] = coordinates.replace('Lat: ', '').replace('Lng: ', '').split(', ').map(Number);
+                
+                // Construct the URL with the product and coordinates
+                var url = '/dunkScout.py?lat=' + lat + '&long=' + lng + '&item=' + encodeURIComponent(product);
+                
+                fetch(url)
+                    .then(response => response.json())
+                    .then(data => {
+                        var resultsDiv = document.getElementById('results');
+                        resultsDiv.innerHTML = '<h2>Prices:</h2>';
+                        if (data.length > 0) {
+                            data.forEach(store => {
+                                resultsDiv.innerHTML += `<p>${store.address} (${store.distance.toFixed(2)} miles away): $${store.price}</p>`;
+                            });
+                        } else {
+                            resultsDiv.innerHTML += '<p>No prices found for this item at nearby stores.</p>';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        document.getElementById('results').innerHTML = '<p>Failed to retrieve prices. Please try again later.</p>';
+                    });
+            } else {
+                alert('Please select coordinates and enter a product name.');
+            }
         });
     </script>
 </body>
