@@ -51,30 +51,80 @@
             if (coordinates && product) {
                 var [lat, lng] = coordinates.replace('Lat: ', '').replace('Lng: ', '').split(', ').map(Number);
                 
-                // Construct the URL with the product and coordinates
-                var url = '/dunkScout.py?lat=' + lat + '&long=' + lng + '&item=' + encodeURIComponent(product);
-                
-                fetch(url)
-                    .then(response => response.json())
-                    .then(data => {
-                        var resultsDiv = document.getElementById('results');
-                        resultsDiv.innerHTML = '<h2>Prices:</h2>';
-                        if (data.length > 0) {
-                            data.forEach(store => {
-                                resultsDiv.innerHTML += `<p>${store.address} (${store.distance.toFixed(2)} miles away): $${store.price}</p>`;
-                            });
-                        } else {
-                            resultsDiv.innerHTML += '<p>No prices found for this item at nearby stores.</p>';
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        document.getElementById('results').innerHTML = '<p>Failed to retrieve prices. Please try again later.</p>';
-                    });
+                findLocations(lat, lng, product);
             } else {
                 alert('Please select coordinates and enter a product name.');
             }
         });
+
+        // Function to find Dunkin locations using coordinates
+        function findLocations(lat, long, product) {
+            var url = `https://mapi-dun.prod.ddmprod.dunkindonuts.com/location/v1/stores?longitude=${long}&latitude=${lat}`;
+            fetch(url, {
+                headers: {
+                    'Authorization': 'bearer d2f28b0ab69842ac91412d448ad10680',
+                    'User-Agent': 'DunkScout'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data && data.data && data.data.length > 0) {
+                    // Filter stores based on distance and get prices
+                    var storeList = data.data.map(store => ({
+                        storeId: store.storeId,
+                        address: `${store.address.line1}, ${store.address.city}, ${store.address.state} ${store.address.postalCode}`,
+                        distance: store.distance
+                    }));
+                    getPricesAtStores(storeList, product);
+                } else {
+                    document.getElementById('results').innerHTML = '<p>No stores found near your location.</p>';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('results').innerHTML = '<p>Failed to retrieve stores. Please try again later.</p>';
+            });
+        }
+
+        // Function to get item prices at each store
+        function getPricesAtStores(storeList, product) {
+            var resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<h2>Prices:</h2>';
+
+            storeList.forEach(store => {
+                var url = `https://mapi-dun.prod.ddmprod.dunkindonuts.com/menu-management/v1/menus/v4/${store.storeId}`;
+                fetch(url, {
+                    headers: {
+                        'Authorization': 'bearer d2f28b0ab69842ac91412d448ad10680',
+                        'User-Agent': 'DunkScout'
+                    }
+                })
+                .then(response => response.json())
+                .then(menuData => {
+                    var price = findItemPrice(menuData, product);
+                    if (price) {
+                        resultsDiv.innerHTML += `<p>${store.address} (${store.distance.toFixed(2)} miles away): $${price}</p>`;
+                    } else {
+                        resultsDiv.innerHTML += `<p>${store.address} (${store.distance.toFixed(2)} miles away): Item not found.</p>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching menu for store:', error);
+                });
+            });
+        }
+
+        // Helper function to find item price in menu
+        function findItemPrice(menuData, itemName) {
+            if (menuData.menuItems) {
+                for (let item of menuData.menuItems) {
+                    if (item.displayName === itemName) {
+                        return item.price;
+                    }
+                }
+            }
+            return null;
+        }
     </script>
 </body>
 </html>
